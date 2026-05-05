@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IoT Dashboard — Kelompok 9</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f5f0ff;
+      --surface:     #ffffff;
+      --surface2:    #faf7ff;
+      --border:      #e4d8fc;
+      --border2:     #cdb5f6;
+      --text:        #3b2d6e;
+      --text2:       #6b5a9e;
+      --muted:       #a896cc;
+      --purple:      #9b72f5;
+      --purple-soft: #c9aeff;
+      --purple-pale: #ede4ff;
+      --purple-acc:  #7c4fe0;
+      --lilac:       #d8c6fc;
+      --green:       #82d9a0;
+      --yellow:      #f6d860;
+      --red:         #f4a0a0;
+      --gray:        #ccc0e8;
+      --font:        'Nunito', sans-serif;
+      --mono:        'DM Mono', monospace;
+      --r-sm:        10px;
+      --r-md:        16px;
+      --r-lg:        20px;
+    }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse at 15% 0%, #e8d6ff 0%, transparent 55%),
+        radial-gradient(ellipse at 85% 100%, #fce4ff 0%, transparent 55%);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      padding: 28px 16px 52px;
+    }
+
+    /* TOP BAR */
+    .topbar {
+      max-width: 780px;
+      margin: 0 auto 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-icon {
+      width: 40px; height: 40px; border-radius: 13px;
+      background: linear-gradient(135deg, #b48ef8, #e0c6ff);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 14px #c9aeff44;
+    }
+    .brand-title { font-size: 17px; font-weight: 700; color: var(--text); }
+    .brand-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; font-weight: 500; }
+
+    .conn-pill {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 12px; font-weight: 700;
+      color: var(--text2);
+      box-shadow: 0 2px 10px #c9aeff22;
+    }
+    .conn-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--gray);
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .conn-dot.ok   { background: #6ecf8a; box-shadow: 0 0 7px #6ecf8a88; }
+    .conn-dot.fail { background: var(--red); box-shadow: 0 0 7px #f4a0a088; }
+
+    /* LAYOUT */
+    .wrap {
+      max-width: 780px;
+      margin: 0 auto;
+      display: flex; flex-direction: column; gap: 13px;
+    }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+
+    /* CARD */
+    .card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 20px 22px;
+      box-shadow: 0 3px 16px #c9aeff14;
+    }
+    .card-label {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.11em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 12px;
+    }
+
+    /* SENSOR VALUE */
+    .sensor-val {
+      font-size: 52px; font-weight: 700;
+      font-family: var(--mono); line-height: 1;
+      background: linear-gradient(135deg, var(--purple-acc) 0%, #b48ef8 60%, var(--purple-soft) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.03em;
+    }
+    .sensor-unit {
+      font-size: 20px; font-weight: 600;
+      color: var(--muted); margin-left: 3px;
+      -webkit-text-fill-color: var(--muted);
+    }
+
+    .indicator {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 13px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 7px 11px;
+    }
+    .led {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--gray); flex-shrink: 0;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .led.green  { background: var(--green);  box-shadow: 0 0 9px #82d9a088; }
+    .led.yellow { background: var(--yellow); box-shadow: 0 0 9px #f6d86088; }
+    .led.red    { background: var(--red);    box-shadow: 0 0 9px #f4a0a088; }
+    .led-label  { font-size: 11px; color: var(--text2); font-weight: 600; }
+
+    /* RELAY */
+    .relay-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-top: 6px;
+    }
+    .relay-item {
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 13px 15px;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+    .relay-item.active {
+      border-color: var(--purple-soft);
+      background: var(--purple-pale);
+      box-shadow: 0 2px 12px #c9aeff33;
+    }
+    .relay-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .relay-sub  { font-size: 10px; color: var(--muted); margin-top: 2px; font-weight: 500; }
+
+    /* Toggle switch */
+    .switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0;
+      background: var(--border2);
+      border-radius: 999px; cursor: pointer;
+      transition: background 0.25s;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      left: 3px; top: 3px;
+      background: #fff; border-radius: 50%;
+      transition: transform 0.25s;
+      box-shadow: 0 1px 5px #0002;
+    }
+    .switch input:checked + .slider { background: linear-gradient(135deg, var(--purple-acc), var(--purple-soft)); }
+    .switch input:checked + .slider::before { transform: translateX(20px); }
+
+    /* MODE */
+    .mode-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+    .mode-badge {
+      padding: 5px 15px; border-radius: 999px;
+      font-size: 12px; font-weight: 700;
+      background: var(--purple-pale);
+      border: 1.5px solid var(--purple-soft);
+      color: var(--purple-acc);
+    }
+    .mode-note { font-size: 11px; color: var(--muted); font-weight: 500; }
+
+    /* LOG */
+    .log-box {
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 10px 13px;
+      height: 130px; overflow-y: auto;
+      font-family: var(--mono); font-size: 11px;
+      margin-top: 8px;
+    }
+    .log-box::-webkit-scrollbar { width: 4px; }
+    .log-box::-webkit-scrollbar-track { background: transparent; }
+    .log-box::-webkit-scrollbar-thumb { background: var(--lilac); border-radius: 2px; }
+    .log-line { line-height: 1.7; }
+    .log-line.in  { color: var(--purple-acc); font-weight: 500; }
+    .log-line.out { color: #b07cf4; }
+    .log-line.err { color: #d96060; }
+    .log-line.sys { color: var(--muted); }
+
+    /* INFO */
+    .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
+    .info-item {
+      text-align: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 10px 6px;
+    }
+    .info-val { font-size: 11px; font-family: var(--mono); color: var(--purple-acc); word-break: break-all; font-weight: 500; }
+    .info-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+
+    /* DIVIDER */
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--muted); font-size: 10px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    @media (max-width: 520px) {
+      .row-2 { grid-template-columns: 1fr; }
+      .info-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-icon">🌸</div>
+    <div>
+      <div class="brand-title">IoT Dashboard</div>
+      <div class="brand-sub">Kelompok 9 — SMK IoT</div>
+    </div>
+  </div>
+  <div class="conn-pill">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-label">Menghubungkan...</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="divider">Sensor DHT11</div>
+  <div class="row-2">
+    <div class="card">
+      <div class="card-label">🌡 Suhu</div>
+      <div>
+        <span class="sensor-val" id="val-suhu">--</span><span class="sensor-unit">°C</span>
+      </div>
+      <div class="indicator">
+        <div class="led" id="led-suhu"></div>
+        <span class="led-label" id="lbl-suhu">Menunggu data...</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">💧 Kelembapan</div>
+      <div>
+        <span class="sensor-val" id="val-hum">--</span><span class="sensor-unit">%</span>
+      </div>
+      <div class="indicator">
+        <div class="led" id="led-dht"></div>
+        <span class="led-label" id="lbl-dht">Sensor DHT</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider">Kontrol Relay</div>
+  <div class="card">
+    <div class="card-label">💡 topic: smk/iot/control11</div>
+    <div class="relay-grid" id="relay-grid"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">🔄 Mode Arduino</div>
+    <div class="mode-row">
+      <span class="mode-badge">MODE: IOT</span>
+      <span class="mode-note">Dikontrol via MQTT · BTN_MODE (GPIO 12) untuk ganti mode</span>
+    </div>
+  </div>
+
+  <div class="divider">Log MQTT</div>
+  <div class="card">
+    <div class="card-label">📡 Pesan masuk / keluar</div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">🔌 Info Koneksi</div>
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-val">hivemq.cloud</div>
+        <div class="info-lbl">Broker</div>
+      </div>
+      <div class="info-item">
+        <div class="info-val">8884 (WSS)</div>
+        <div class="info-lbl">Port</div>
+      </div>
+      <div class="info-item">
+        <div class="info-val">kelompok9</div>
+        <div class="info-lbl">Username</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BROKER     = "77a562f5ba86465fb1040679ab5e4c61.s1.eu.hivemq.cloud";
+  const PORT       = 8884;
+  const USER       = "kelompok9";
+  const PASS       = "Kelompok_9";
+  const TOPIC_SUHU = "smk/iot/sensorsuhu11";
+  const TOPIC_HUM  = "smk/iot/sensorkelembaban11";
+  const TOPIC_CTRL = "smk/iot/control11";
+
+  const relayOn = [false, false, false, false];
+  let mqttClient = null;
+
+  function log(msg, type) {
+    const box = document.getElementById("log-box");
+    const t   = new Date().toLocaleTimeString("id-ID");
+    const el  = document.createElement("div");
+    el.className = "log-line " + (type || "sys");
+    el.textContent = "[" + t + "] " + msg;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+    if (box.children.length > 80) box.removeChild(box.firstChild);
+  }
+
+  function updateSuhu(raw) {
+    const v = parseFloat(raw);
+    document.getElementById("val-suhu").textContent = isNaN(v) ? "--" : v.toFixed(1);
+    const led = document.getElementById("led-suhu");
+    const lbl = document.getElementById("lbl-suhu");
+    if (isNaN(v)) { led.className = "led"; lbl.textContent = "Menunggu data..."; return; }
+    if      (v < 27) { led.className = "led green";  lbl.textContent = "Normal — LED Hijau (< 27°C)"; }
+    else if (v < 31) { led.className = "led yellow"; lbl.textContent = "Hangat — LED Kuning (27–30°C)"; }
+    else             { led.className = "led red";    lbl.textContent = "Panas! — LED Merah (≥ 31°C)"; }
+  }
+
+  function updateHum(raw) {
+    const v = parseFloat(raw);
+    document.getElementById("val-hum").textContent = isNaN(v) ? "--" : v.toFixed(1);
+    const led = document.getElementById("led-dht");
+    const lbl = document.getElementById("lbl-dht");
+    if (!isNaN(v)) { led.className = "led green"; lbl.textContent = "DHT11 aktif — LED_DHT ON"; }
+    else           { led.className = "led"; lbl.textContent = "Sensor DHT"; }
+  }
+
+  const relayNames = ["Relay 1", "Relay 2", "Relay 3", "Relay 4"];
+  const relayPins  = ["GPIO 4", "GPIO 18", "GPIO 19", "GPIO 21"];
+
+  function buildRelayGrid() {
+    const grid = document.getElementById("relay-grid");
+    grid.innerHTML = "";
+    relayNames.forEach(function(name, i) {
+      const div = document.createElement("div");
+      div.className = "relay-item";
+      div.id = "rc-" + i;
+      div.innerHTML =
+        '<div>' +
+          '<div class="relay-name">' + name + '</div>' +
+          '<div class="relay-sub">' + relayPins[i] + ' · BTN' + (i+1) + '</div>' +
+        '</div>' +
+        '<label class="switch">' +
+          '<input type="checkbox" id="chk-r' + i + '" onchange="toggleRelay(' + i + ')" />' +
+          '<span class="slider"></span>' +
+        '</label>';
+      grid.appendChild(div);
+    });
+  }
+
+  function toggleRelay(i) {
+    relayOn[i] = document.getElementById("chk-r" + i).checked;
+    const card = document.getElementById("rc-" + i);
+    relayOn[i] ? card.classList.add("active") : card.classList.remove("active");
+    const payload = "R" + (i+1) + "_" + (relayOn[i] ? "ON" : "OFF");
+    if (mqttClient && mqttClient.isConnected()) {
+      const msg = new Paho.MQTT.Message(payload);
+      msg.destinationName = TOPIC_CTRL;
+      mqttClient.send(msg);
+      log("→ " + TOPIC_CTRL + " : " + payload, "out");
+    } else {
+      log("Tidak terkoneksi — " + payload + " tidak terkirim", "err");
+    }
+  }
+
+  function connect() {
+    const clientId = "web9_" + Math.floor(Math.random() * 99999);
+    mqttClient = new Paho.MQTT.Client(BROKER, PORT, clientId);
+
+    mqttClient.onConnectionLost = function(r) {
+      setConn(false);
+      log("Koneksi terputus: " + r.errorMessage, "err");
+      setTimeout(connect, 5000);
+    };
+
+    mqttClient.onMessageArrived = function(m) {
+      const t = m.destinationName, v = m.payloadString;
+      if      (t === TOPIC_SUHU) { updateSuhu(v); log("← suhu: " + v + "°C", "in"); }
+      else if (t === TOPIC_HUM)  { updateHum(v);  log("← kelembapan: " + v + "%", "in"); }
+      else                       { log("← [" + t + "] " + v, "in"); }
+    };
+
+    log("Menghubungkan ke HiveMQ Cloud...");
+    mqttClient.connect({
+      useSSL: true,
+      userName: USER,
+      password: PASS,
+      onSuccess: function() {
+        setConn(true);
+        log("Berhasil terhubung! ✨", "in");
+        mqttClient.subscribe(TOPIC_SUHU);
+        mqttClient.subscribe(TOPIC_HUM);
+        mqttClient.subscribe(TOPIC_CTRL);
+        log("Subscribe: " + TOPIC_SUHU, "sys");
+        log("Subscribe: " + TOPIC_HUM, "sys");
+        log("Subscribe: " + TOPIC_CTRL, "sys");
+      },
+      onFailure: function(e) {
+        setConn(false);
+        log("Gagal: " + e.errorMessage + " (rc=" + e.errorCode + ")", "err");
+        setTimeout(connect, 5000);
+      }
+    });
+  }
+
+  function setConn(ok) {
+    document.getElementById("conn-dot").className     = "conn-dot " + (ok ? "ok" : "fail");
+    document.getElementById("conn-label").textContent = ok ? "Terhubung ✨" : "Terputus";
+  }
+
+  buildRelayGrid();
+  connect();
+</script>
+</body>
+</html>
