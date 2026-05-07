@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif;}
+:root{
+  --bg1:#0f0a1e;--bg2:#1a0e3a;--card:#1e1040;--cardborder:#6d28d9;
+  --accent:#a855f7;--accent2:#7c3aed;--accent3:#c084fc;
+  --text:#e9d5ff;--subtext:#a78bfa;--danger:#ef4444;
+  --green:#22c55e;--blue:#60a5fa;--surface:#150d30;
+}
+body{background:linear-gradient(135deg,var(--bg1),var(--bg2));min-height:600px;padding:14px;padding-bottom:80px;color:var(--text);transition:background 0.4s,color 0.4s;}
+body.light{
+  --bg1:#f3e8ff;--bg2:#ede9fe;--card:#fff;--cardborder:#a855f7;
+  --accent:#7c3aed;--accent2:#6d28d9;--accent3:#9333ea;
+  --text:#3b0764;--subtext:#6d28d9;--danger:#dc2626;
+  --green:#16a34a;--blue:#2563eb;--surface:#f5f3ff;
+}
+body.light{background:linear-gradient(135deg,#f3e8ff,#ede9fe);}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+.title{font-size:18px;font-weight:bold;color:var(--accent3);}
+.topbtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.btn{padding:6px 12px;border-radius:20px;border:1px solid var(--cardborder);background:var(--card);color:var(--accent3);cursor:pointer;font-size:12px;transition:all 0.2s;}
+.btn:hover{background:var(--accent2);color:#fff;transform:scale(1.05);}
+.btn.active{background:var(--accent2);color:#fff;}
+.card{background:var(--card);border:1px solid var(--cardborder);border-radius:16px;padding:14px;margin-bottom:10px;position:relative;overflow:hidden;transition:background 0.4s,border 0.4s;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent2),var(--accent3),var(--accent2));animation:shimmer 2s linear infinite;background-size:200% 100%;}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.big{font-size:38px;font-weight:bold;color:var(--accent);}
+.label{font-size:11px;color:var(--subtext);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;}
+.bar{height:8px;background:rgba(109,40,217,0.2);border-radius:20px;margin-top:8px;overflow:hidden;}
+.fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent2),var(--accent3));transition:0.5s;border-radius:20px;}
+.fill.danger{background:linear-gradient(90deg,#991b1b,#ef4444);}
+.alert-box{display:none;padding:10px 14px;background:#7f1d1d;border:1px solid var(--danger);color:#fca5a5;border-radius:12px;margin-bottom:10px;font-size:13px;font-weight:600;animation:alertpulse 0.7s ease-in-out infinite;}
+@keyframes alertpulse{0%,100%{opacity:1;}50%{opacity:0.7;transform:scale(1.01);}}
+.toast-wrap{position:fixed;bottom:70px;right:14px;z-index:999;display:flex;flex-direction:column;gap:6px;}
+.toast{background:var(--card);border-left:4px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,0.4);animation:toastin 0.3s ease;max-width:220px;}
+.toast.danger{border-color:var(--danger);color:#fca5a5;}
+@keyframes toastin{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+.history-box{max-height:120px;overflow-y:auto;font-size:12px;}
+.history-box::-webkit-scrollbar{width:4px;}
+.history-box::-webkit-scrollbar-thumb{background:var(--accent2);border-radius:4px;}
+.hist-item{padding:3px 6px;border-left:2px solid var(--cardborder);margin-bottom:3px;color:var(--subtext);border-radius:0 4px 4px 0;font-size:11px;}
+.hist-item.hot{border-color:var(--danger);color:#ef4444;}
+canvas#chart{width:100%!important;border-radius:8px;}
+#pixelStage{position:fixed;bottom:0;left:0;right:0;height:62px;pointer-events:none;z-index:50;}
+.ukk-only{display:none;}
+.iot-only{display:block;}
+body.ukk-mode .ukk-only{display:block;}
+body.ukk-mode .iot-only{display:none;}
+.mode-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;background:var(--accent2);color:#fff;margin-left:6px;}
+body.ukk-mode .mode-badge{background:#0f766e;}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;background:#555;transition:background 0.3s;}
+.status-dot.on{background:var(--green);box-shadow:0 0 6px var(--green);}
+.status-dot.off{background:var(--danger);}
+.conn-row{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;}
+.conn-status{font-size:12px;color:var(--subtext);}
+.relay-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.relay-card{background:var(--surface);border:1px solid var(--cardborder);border-radius:12px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;transition:all 0.3s;}
+.relay-card.on-state{border-color:var(--green);background:rgba(34,197,94,0.1);}
+.relay-name{font-size:12px;color:var(--text);font-weight:500;}
+.relay-sub{font-size:10px;color:var(--subtext);}
+.toggle{position:relative;width:38px;height:20px;cursor:pointer;}
+.toggle input{opacity:0;width:0;height:0;}
+.slider{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(109,40,217,0.3);border-radius:20px;transition:0.3s;}
+.slider:before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#888;border-radius:50%;transition:0.3s;}
+.toggle input:checked+.slider{background:var(--green);}
+.toggle input:checked+.slider:before{transform:translateX(18px);background:#fff;}
+.theme-btn{width:30px;height:30px;border-radius:50%;border:1px solid var(--cardborder);background:var(--card);color:var(--accent3);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+.theme-btn:hover{transform:scale(1.1);background:var(--accent2);color:#fff;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="title">UKK SIJA 2026 <span class="mode-badge" id="modeBadge">IoT</span></div>
+  <div class="topbtns">
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle Light/Dark">☀</button>
+    <button class="btn active" id="btnIot" onclick="setMode('iot')">IoT</button>
+    <button class="btn" id="btnUkk" onclick="setMode('ukk')">UKK</button>
+  </div>
+</div>
+
+<div class="alert-box" id="alertBox">⚠ BAHAYA! Suhu Sangat Tinggi!</div>
+
+<div class="grid2">
+  <div class="card">
+    <div class="label">Suhu</div>
+    <div class="big" id="suhu">--°C</div>
+    <div class="bar"><div class="fill" id="barSuhu"></div></div>
+  </div>
+  <div class="card">
+    <div class="label">Kelembapan</div>
+    <div class="big" id="hum">--%</div>
+    <div class="bar"><div class="fill" id="barHum"></div></div>
+  </div>
+</div>
+
+<div class="card iot-only" id="relayCard">
+  <div class="label" style="margin-bottom:8px;">Kontrol Relay</div>
+  <div class="relay-grid" id="relayGrid"></div>
+</div>
+
+<div class="card">
+  <div class="label" style="margin-bottom:8px;">Grafik Realtime</div>
+  <canvas id="chart" height="130"></canvas>
+</div>
+
+<div class="card">
+  <div class="label" style="margin-bottom:6px;">Riwayat Data (Sementara)</div>
+  <div class="history-box" id="history"></div>
+</div>
+
+<div class="card">
+  <div class="label">Koneksi MQTT</div>
+  <div class="conn-row">
+    <span class="status-dot" id="connDot"></span>
+    <span class="conn-status" id="connStatus">Menghubungkan...</span>
+    <button class="btn iot-only" onclick="toggleConn()" style="padding:4px 10px;font-size:11px;">Connect / Disconnect</button>
+    <button class="btn ukk-only" onclick="toggleConn()" style="padding:4px 10px;font-size:11px;">Connect / Disconnect</button>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<canvas id="pixelStage"></canvas>
+
+<script>
+const broker="broker.hivemq.com", port=8000;
+const tSuhu="smk/iot/sensorsuhu11";
+const tHum="smk/iot/sensorkelembaban11";
+const tControl="smk/iot/control11";   // topic kirim perintah relay
+const tMode="smk/iot/mode11";         // topic kirim perintah mode
+
+let client, connected=false, currentMode='iot', isDark=true;
+let historyData=[], audioCtx=null;
+
+const relays=[
+  {id:1,name:"Relay 1",sub:"R1",state:false},
+  {id:2,name:"Relay 2",sub:"R2",state:false},
+  {id:3,name:"Relay 3",sub:"R3",state:false},
+  {id:4,name:"Relay 4",sub:"R4",state:false},
+];
+
+function buildRelays(){
+  const g=document.getElementById("relayGrid");
+  g.innerHTML=relays.map(r=>`
+    <div class="relay-card${r.state?' on-state':''}" id="rc${r.id}">
+      <div>
+        <div class="relay-name">${r.name}</div>
+        <div class="relay-sub">${r.sub}</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" ${r.state?'checked':''} onchange="toggleRelay(${r.id},this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+  `).join("");
+}
+buildRelays();
+
+// Kirim perintah relay ke Arduino dengan format: R1_ON / R1_OFF
+function toggleRelay(id,val){
+  const r=relays.find(x=>x.id===id);
+  r.state=val;
+  document.getElementById("rc"+id).className="relay-card"+(val?" on-state":"");
+  if(connected&&client){
+    try{
+      // Format string yang dibaca Arduino di callback: "R1_ON", "R2_OFF", dst
+      const payload="R"+id+"_"+(val?"OFF":"ON");
+      const msg=new Paho.MQTT.Message(payload);
+      msg.destinationName=tControl;
+      client.send(msg);
+    }catch(e){console.error(e);}
+  }
+  toast((val?"OFF":"ON")+": "+r.name);
+  beep();
+}
+
+// Kirim perintah ganti mode ke Arduino
+function sendModeToArduino(modeStr){
+  if(!connected||!client) return;
+  try{
+    const msg=new Paho.MQTT.Message(modeStr); // "MODE_IOT" atau "MODE_UKK"
+    msg.destinationName=tMode;
+    client.send(msg);
+  }catch(e){console.error(e);}
+}
+
+function getAudioCtx(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  return audioCtx;
+}
+function playAlarm(){
+  try{
+    const ctx=getAudioCtx();
+    [440,554,659,880,659,554,440].forEach((freq,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.type='square';o.frequency.value=freq;
+      const t=ctx.currentTime+i*0.1;
+      g.gain.setValueAtTime(0.12,t);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+      o.start(t);o.stop(t+0.1);
+    });
+  }catch(e){}
+}
+function beep(){
+  try{
+    const ctx=getAudioCtx(),o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    o.type='sine';o.frequency.value=660;
+    g.gain.setValueAtTime(0.08,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.15);
+    o.start();o.stop(ctx.currentTime+0.15);
+  }catch(e){}
+}
+
+const chartInst=new Chart(document.getElementById("chart"),{
+  type:'line',
+  data:{
+    labels:[],
+    datasets:[
+      {label:"Suhu (°C)",data:[],borderColor:"#a855f7",backgroundColor:"rgba(168,85,247,0.07)",fill:true,tension:0.4,pointRadius:2,borderWidth:2},
+      {label:"Kelembapan (%)",data:[],borderColor:"#60a5fa",backgroundColor:"rgba(96,165,250,0.07)",fill:true,tension:0.4,pointRadius:2,borderWidth:2}
+    ]
+  },
+  options:{
+    animation:false,responsive:true,
+    plugins:{legend:{labels:{color:'#a78bfa',font:{size:10}}}},
+    scales:{
+      x:{ticks:{color:'#a78bfa',font:{size:9}},grid:{color:'rgba(109,40,217,0.15)'}},
+      y:{ticks:{color:'#a78bfa',font:{size:9}},grid:{color:'rgba(109,40,217,0.15)'}}
+    }
+  }
+});
+
+function addHistory(text,hot=false){
+  const ts=new Date().toLocaleTimeString('id-ID');
+  historyData.unshift({text,ts,hot});
+  if(historyData.length>40) historyData.pop();
+  document.getElementById("history").innerHTML=
+    historyData.map(d=>`<div class="hist-item${d.hot?' hot':''}">[${d.ts}] ${d.text}</div>`).join("");
+}
+
+function toast(msg,isDanger=false){
+  const w=document.getElementById("toastWrap");
+  const t=document.createElement("div");
+  t.className="toast"+(isDanger?" danger":"");
+  t.innerText=msg;w.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(110%)';t.style.transition='0.3s';setTimeout(()=>t.remove(),300);},3000);
+}
+
+function updateSuhu(v){
+  document.getElementById("suhu").innerText=v+"°C";
+  const bar=document.getElementById("barSuhu");
+  bar.style.width=Math.min(v,100)+"%";
+  const hot=v>31;
+  bar.className="fill"+(hot?" danger":"");
+  document.getElementById("alertBox").style.display=hot?"block":"none";
+  if(hot){toast("⚠ Suhu tinggi: "+v+"°C",true);playAlarm();}
+  addHistory("Suhu: "+v+"°C",hot);
+  const d=chartInst.data;
+  const lbl=new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  d.labels.push(lbl);d.datasets[0].data.push(v);
+  if(d.labels.length>20){d.labels.shift();d.datasets[0].data.shift();}
+  chartInst.update();
+}
+
+function updateHum(v){
+  document.getElementById("hum").innerText=v+"%";
+  document.getElementById("barHum").style.width=Math.min(v,100)+"%";
+  addHistory("Kelembapan: "+v+"%");
+  const d=chartInst.data;
+  d.datasets[1].data.push(v);
+  if(d.datasets[1].data.length>20) d.datasets[1].data.shift();
+  chartInst.update();
+}
+
+function setConnUI(isOn){
+  connected=isOn;
+  document.getElementById("connDot").className="status-dot"+(isOn?" on":" off");
+  document.getElementById("connStatus").textContent=isOn?"Terhubung ke "+broker:"Terputus";
+}
+
+function connect(){
+  client=new Paho.MQTT.Client(broker,port,"/mqtt","web_"+Math.random().toString(36).substr(2,8));
+  client.onConnectionLost=()=>{setConnUI(false);toast("MQTT terputus...");setTimeout(connect,3000);};
+  client.onMessageArrived=(m)=>{
+    if(m.destinationName==tSuhu) updateSuhu(parseFloat(m.payloadString));
+    if(m.destinationName==tHum) updateHum(parseFloat(m.payloadString));
+  };
+  client.connect({
+    onSuccess:()=>{
+      setConnUI(true);
+      toast("MQTT Terhubung");
+      client.subscribe(tSuhu);
+      client.subscribe(tHum);
+    },
+    onFailure:()=>{setConnUI(false);setTimeout(connect,3000);}
+  });
+}
+
+function toggleConn(){
+  if(connected&&client){try{client.disconnect();}catch(e){}setConnUI(false);toast("Disconnected");}
+  else{toast("Menghubungkan...");connect();}
+}
+
+function setMode(m){
+  currentMode=m;
+  document.body.classList.toggle('ukk-mode',m==='ukk');
+  document.getElementById("btnIot").classList.toggle('active',m==='iot');
+  document.getElementById("btnUkk").classList.toggle('active',m==='ukk');
+  document.getElementById("modeBadge").textContent=m==='ukk'?'UKK':'IoT';
+
+  // Kirim perintah mode ke Arduino via MQTT
+  sendModeToArduino(m==='ukk'?'MODE_UKK':'MODE_IOT');
+
+  // Jika pindah ke UKK, reset semua toggle relay di UI
+  if(m==='ukk'){
+    relays.forEach(r=>r.state=false);
+    buildRelays();
+  }
+
+  beep();
+  addHistory("Mode diubah ke: "+(m==='ukk'?'UKK':'IoT'));
+  toast("Mode: "+(m==='ukk'?'UKK':'IoT'));
+}
+
+function toggleTheme(){
+  isDark=!isDark;
+  document.body.classList.toggle('light',!isDark);
+  document.getElementById("themeBtn").textContent=isDark?'☀':'🌙';
+  const tc=isDark?'#a78bfa':'#6d28d9';
+  chartInst.options.plugins.legend.labels.color=tc;
+  chartInst.options.scales.x.ticks.color=tc;
+  chartInst.options.scales.y.ticks.color=tc;
+  chartInst.options.scales.x.grid.color=isDark?'rgba(109,40,217,0.15)':'rgba(109,40,217,0.1)';
+  chartInst.options.scales.y.grid.color=isDark?'rgba(109,40,217,0.15)':'rgba(109,40,217,0.1)';
+  chartInst.update();
+}
+
+connect();
+
+// ===================== PIXEL ART =====================
+const px=document.getElementById("pixelStage");
+const pc=px.getContext("2d");
+px.style.imageRendering="pixelated";
+function resizePx(){px.width=window.innerWidth;px.height=62;}
+resizePx();
+window.addEventListener('resize',resizePx);
+const S=4;
+const CAT=["00110","01111","11111","01110","01010"];
+const CAT2=["00110","01111","11111","01110","10101"];
+const BEAR=["11011","11111","01110","11111","01010"];
+const BEAR2=["11011","11111","01110","11111","10101"];
+const BIRD=["0110","1111","0110","0100"];
+const BIRD2=["0110","1111","0110","1000"];
+const RABBIT=["10001","11111","01110","11111","01010"];
+const RABBIT2=["10001","11111","01110","11111","10101"];
+const FROG=["10001","11111","11011","01110","01110"];
+const FROG2=["10001","11111","11011","10001","01110"];
+const STAR_SPRITE=["010","111","010"];
+const MUSHROOM=["01110","11111","11111","01010","01010"];
+function drawSprite(spr,color,x,y,flip=false){
+  pc.fillStyle=color;
+  spr.forEach((row,ry)=>{
+    [...row].forEach((p,rx)=>{
+      if(p==='1'){const dx=flip?x+(row.length-1-rx)*S:x+rx*S;pc.fillRect(dx,y+ry*S,S,S);}
+    });
+  });
+}
+const actors=[
+  {spr:[CAT,CAT2],col:"#c084fc",x:60,y:16,dir:1,frame:0,speed:1.3,type:'walk'},
+  {spr:[BEAR,BEAR2],col:"#a78bfa",x:200,y:14,dir:1,frame:0,speed:0.8,type:'walk'},
+  {spr:[BIRD,BIRD2],col:"#60a5fa",x:380,y:6,dir:-1,frame:0,speed:2.1,type:'fly',floatT:0},
+  {spr:[RABBIT,RABBIT2],col:"#f0abfc",x:520,y:16,dir:1,frame:0,speed:1.5,type:'walk'},
+  {spr:[FROG,FROG2],col:"#4ade80",x:140,y:18,dir:-1,frame:0,speed:0.6,type:'hop',hopT:0},
+  {spr:[CAT,CAT2],col:"#fb923c",x:700,y:16,dir:-1,frame:0,speed:1.1,type:'walk'},
+  {spr:[BEAR,BEAR2],col:"#818cf8",x:900,y:14,dir:1,frame:0,speed:0.9,type:'walk'},
+  {spr:[BIRD,BIRD2],col:"#f472b6",x:1050,y:4,dir:-1,frame:0,speed:1.8,type:'fly',floatT:1.5},
+  {spr:[RABBIT,RABBIT2],col:"#fbbf24",x:300,y:16,dir:-1,frame:0,speed:1.2,type:'walk'},
+  {spr:[FROG,FROG2],col:"#34d399",x:800,y:18,dir:1,frame:0,speed:0.7,type:'hop',hopT:2},
+  {spr:[MUSHROOM,MUSHROOM],col:"#f87171",x:460,y:14,dir:1,frame:0,speed:0.5,type:'walk'},
+  {spr:[CAT,CAT2],col:"#38bdf8",x:1150,y:16,dir:-1,frame:0,speed:1.6,type:'walk'},
+];
+const stars=Array.from({length:12},(_,i)=>({x:Math.random()*1400,y:Math.random()*12,t:Math.random()*Math.PI*2,col:["#c084fc","#a78bfa","#60a5fa","#f0abfc"][i%4]}));
+let tick=0;
+function animLoop(){
+  requestAnimationFrame(animLoop);
+  tick++;
+  const W=px.width;
+  pc.clearRect(0,0,W,62);
+  pc.fillStyle=isDark?'rgba(109,40,217,0.25)':'rgba(109,40,217,0.12)';
+  pc.fillRect(0,56,W,2);
+  stars.forEach(s=>{
+    s.t+=0.05;
+    const alpha=0.4+0.6*Math.abs(Math.sin(s.t));
+    pc.globalAlpha=alpha;
+    drawSprite(STAR_SPRITE,s.col,s.x,s.y,false);
+    pc.globalAlpha=1;
+  });
+  actors.forEach(a=>{
+    a.x+=a.dir*a.speed;
+    if(a.x>W+60)a.x=-30;if(a.x<-60)a.x=W+30;
+    if(tick%10===0)a.frame=1-a.frame;
+    let yOff=0;
+    if(a.type==='fly'){a.floatT=(a.floatT||0)+0.07;yOff=Math.sin(a.floatT)*4;}
+    if(a.type==='hop'){a.hopT=(a.hopT||0)+0.12;yOff=-Math.max(0,Math.sin(a.hopT)*8);}
+    drawSprite(a.spr[a.frame],a.col,a.x,a.y+yOff,a.dir<0);
+  });
+  if(document.getElementById("alertBox").style.display==="block"){
+    pc.fillStyle=`rgba(239,68,68,${0.25+0.2*Math.sin(tick*0.25)})`;
+    pc.fillRect(0,0,W,62);
+  }
+}
+animLoop();
+</script>
+</body>
+</html>
